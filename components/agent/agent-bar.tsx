@@ -153,7 +153,7 @@ function AgentVoicePill({
                 })),
               }
             : undefined;
-        const res = await fetch('/api/generate/tts', {
+        const res = await fetch('/openmaic/api/generate/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -434,7 +434,7 @@ function TeacherVoicePill({
                 })),
               }
             : undefined;
-        const res = await fetch('/api/generate/tts', {
+        const res = await fetch('/openmaic/api/generate/tts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({

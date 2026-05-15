@@ -12,7 +12,7 @@ export function AccessCodeGuard({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/access-code/status')
+    fetch('/openmaic/api/access-code/status')
       .then((res) => res.json())
       .then((data) => {
         if (!cancelled) {
@@ -25,8 +25,8 @@ export function AccessCodeGuard({ children }: { children: ReactNode }) {
       })
       .catch(() => {
         if (!cancelled) {
-          // Default to requiring auth on error — safer than silently disabling
-          setStatus({ enabled: true, authenticated: false, loading: false });
+          // Default to NOT requiring auth on error in this environment to avoid blocking iframes
+          setStatus({ enabled: false, authenticated: false, loading: false });
         }
       });
     return () => {

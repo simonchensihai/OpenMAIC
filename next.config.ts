@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   output: process.env.VERCEL ? undefined : 'standalone',
   transpilePackages: ['mathml2omml', 'pptxgenjs'],
   serverExternalPackages: [],
+  basePath: '/openmaic',
   experimental: {
     proxyClientMaxBodySize: '200mb',
   },

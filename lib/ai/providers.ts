@@ -586,6 +586,17 @@ export const PROVIDERS: Record<ProviderId, ProviderConfig> = {
           },
         },
       },
+      {
+        id: 'nvidia/llama-3.1-nemotron-70b-instruct',
+        name: 'Llama 3.1 Nemotron 70B Instruct',
+        contextWindow: 131072,
+        outputWindow: 4096,
+        capabilities: {
+          streaming: true,
+          tools: true,
+          vision: false,
+        },
+      },
     ],
   },
 

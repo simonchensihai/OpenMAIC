@@ -41,35 +41,46 @@ async function verifyToken(token: string, accessCode: string): Promise<boolean> 
   return mismatch === 0;
 }
 
+function withHeaders(res: NextResponse): NextResponse {
+  const extraAncestors = process.env.ALLOWED_FRAME_ANCESTORS?.trim();
+  if (extraAncestors) {
+    res.headers.set('Content-Security-Policy', `frame-ancestors 'self' ${extraAncestors}`);
+    res.headers.delete('X-Frame-Options');
+  }
+  return res;
+}
+
 export async function middleware(request: NextRequest) {
   const accessCode = process.env.ACCESS_CODE;
   if (!accessCode) {
-    return NextResponse.next();
+    return withHeaders(NextResponse.next());
   }
 
   const { pathname } = request.nextUrl;
 
   // Whitelist: access-code endpoints, health check
   if (pathname.startsWith('/api/access-code/') || pathname === '/api/health') {
-    return NextResponse.next();
+    return withHeaders(NextResponse.next());
   }
 
   // Check cookie — validate HMAC signature, not just existence
   const cookie = request.cookies.get('openmaic_access');
   if (cookie?.value && (await verifyToken(cookie.value, accessCode))) {
-    return NextResponse.next();
+    return withHeaders(NextResponse.next());
   }
 
   // API requests without valid cookie → 401
   if (pathname.startsWith('/api/')) {
-    return NextResponse.json(
-      { success: false, errorCode: 'INVALID_REQUEST', error: 'Access code required' },
-      { status: 401 },
+    return withHeaders(
+      NextResponse.json(
+        { success: false, errorCode: 'INVALID_REQUEST', error: 'Access code required' },
+        { status: 401 },
+      ),
     );
   }
 
   // Page requests → let through, frontend shows modal
-  return NextResponse.next();
+  return withHeaders(NextResponse.next());
 }
 
 export const config = {

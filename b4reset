@@ -1,0 +1,275 @@
+diff --git a/app/api/access-code/status/route.ts b/app/api/access-code/status/route.ts
+index b97ceac..4a30fe1 100644
+--- a/app/api/access-code/status/route.ts
++++ b/app/api/access-code/status/route.ts
+@@ -3,14 +3,20 @@ import { apiSuccess } from '@/lib/server/api-response';
+ import { verifyAccessToken } from '@/app/api/access-code/verify/route';
+ 
+ export async function GET() {
++  console.log('[DEBUG] GET /api/access-code/status');
+   const accessCode = process.env.ACCESS_CODE;
+   const enabled = !!accessCode;
++  console.log('[DEBUG] enabled:', enabled);
+ 
+   let authenticated = false;
+-  if (enabled) {
+-    const cookieStore = await cookies();
+-    const token = cookieStore.get('openmaic_access')?.value;
+-    authenticated = !!token && verifyAccessToken(token, accessCode);
++  try {
++    if (enabled && accessCode) {
++      const cookieStore = await cookies();
++      const token = cookieStore.get('openmaic_access')?.value;
++      authenticated = !!token && verifyAccessToken(token, accessCode);
++    }
++  } catch (err) {
++    console.error('[DEBUG] status error:', err);
+   }
+ 
+   return apiSuccess({ enabled, authenticated });
+diff --git a/app/classroom/[id]/page.tsx b/app/classroom/[id]/page.tsx
+index 14a6f82..618e2c8 100644
+--- a/app/classroom/[id]/page.tsx
++++ b/app/classroom/[id]/page.tsx
+@@ -40,7 +40,7 @@ export default function ClassroomDetailPage() {
+       if (!useStageStore.getState().stage) {
+         log.info('No IndexedDB data, trying server-side storage for:', classroomId);
+         try {
+-          const res = await fetch(`/api/classroom?id=${encodeURIComponent(classroomId)}`);
++          const res = await fetch(`/openmaic/api/classroom?id=${encodeURIComponent(classroomId)}`);
+           if (res.ok) {
+             const json = await res.json();
+             if (json.success && json.classroom) {
+diff --git a/app/generation-preview/page.tsx b/app/generation-preview/page.tsx
+index 5b56d24..1e65e0e 100644
+--- a/app/generation-preview/page.tsx
++++ b/app/generation-preview/page.tsx
+@@ -275,7 +275,7 @@ function GenerationPreviewContent() {
+           parseFormData.append('baseUrl', currentSession.pdfProviderConfig.baseUrl);
+         }
+ 
+-        const parseResponse = await fetch('/api/parse-pdf', {
++        const parseResponse = await fetch('/openmaic/api/parse-pdf', {
+           method: 'POST',
+           body: parseFormData,
+           signal,
+@@ -388,7 +388,7 @@ function GenerationPreviewContent() {
+         const wsSettings = useSettingsStore.getState();
+         const wsProviderId = wsSettings.webSearchProviderId;
+         const wsConfig = wsSettings.webSearchProvidersConfig?.[wsProviderId];
+-        const res = await fetch('/api/web-search', {
++        const res = await fetch('/openmaic/api/web-search', {
+           method: 'POST',
+           headers: getApiHeaders(),
+           body: JSON.stringify(
+@@ -470,7 +470,7 @@ function GenerationPreviewContent() {
+           const collected: SceneOutline[] = [];
+           let directive: string | undefined;
+ 
+-          fetch('/api/generate/scene-outlines-stream', {
++          fetch('/openmaic/api/generate/scene-outlines-stream', {
+             method: 'POST',
+             headers: getApiHeaders(),
+             body: JSON.stringify(
+@@ -689,7 +689,7 @@ function GenerationPreviewContent() {
+             );
+           };
+ 
+-          const agentResp = await fetch('/api/generate/agent-profiles', {
++          const agentResp = await fetch('/openmaic/api/generate/agent-profiles', {
+             method: 'POST',
+             headers: getApiHeaders(),
+             body: JSON.stringify(
+@@ -806,7 +806,7 @@ function GenerationPreviewContent() {
+       const firstOutline = outlines[0];
+ 
+       // Step 2: Generate content (currentStepIndex is already 2)
+-      const contentResp = await fetch('/api/generate/scene-content', {
++      const contentResp = await fetch('/openmaic/api/generate/scene-content', {
+         method: 'POST',
+         headers: getApiHeaders(),
+         body: JSON.stringify(
+@@ -838,7 +838,7 @@ function GenerationPreviewContent() {
+       const actionsStepIdx = activeSteps.findIndex((s) => s.id === 'actions');
+       setCurrentStepIndex(actionsStepIdx >= 0 ? actionsStepIdx : currentStepIndex + 1);
+ 
+-      const actionsResp = await fetch('/api/generate/scene-actions', {
++      const actionsResp = await fetch('/openmaic/api/generate/scene-actions', {
+         method: 'POST',
+         headers: getApiHeaders(),
+         body: JSON.stringify(
+@@ -888,7 +888,7 @@ function GenerationPreviewContent() {
+           const audioId = `tts_${action.id}`;
+           action.audioId = audioId;
+           try {
+-            const resp = await fetch('/api/generate/tts', {
++            const resp = await fetch('/openmaic/api/generate/tts', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify({
+diff --git a/components/access-code-guard.tsx b/components/access-code-guard.tsx
+index 8aa0b35..f2fad37 100644
+--- a/components/access-code-guard.tsx
++++ b/components/access-code-guard.tsx
+@@ -12,7 +12,7 @@ export function AccessCodeGuard({ children }: { children: ReactNode }) {
+ 
+   useEffect(() => {
+     let cancelled = false;
+-    fetch('/api/access-code/status')
++    fetch('/openmaic/api/access-code/status')
+       .then((res) => res.json())
+       .then((data) => {
+         if (!cancelled) {
+@@ -25,8 +25,8 @@ export function AccessCodeGuard({ children }: { children: ReactNode }) {
+       })
+       .catch(() => {
+         if (!cancelled) {
+-          // Default to requiring auth on error — safer than silently disabling
+-          setStatus({ enabled: true, authenticated: false, loading: false });
++          // Default to NOT requiring auth on error in this environment to avoid blocking iframes
++          setStatus({ enabled: false, authenticated: false, loading: false });
+         }
+       });
+     return () => {
+diff --git a/components/access-code-modal.tsx b/components/access-code-modal.tsx
+index 66a3c9f..7756834 100644
+--- a/components/access-code-modal.tsx
++++ b/components/access-code-modal.tsx
+@@ -31,7 +31,7 @@ export function AccessCodeModal({ open, onSuccess }: AccessCodeModalProps) {
+     setLoading(true);
+ 
+     try {
+-      const res = await fetch('/api/access-code/verify', {
++      const res = await fetch('/openmaic/api/access-code/verify', {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ code }),
+diff --git a/components/agent/agent-bar.tsx b/components/agent/agent-bar.tsx
+index ade89c7..90f9c96 100644
+--- a/components/agent/agent-bar.tsx
++++ b/components/agent/agent-bar.tsx
+@@ -153,7 +153,7 @@ function AgentVoicePill({
+                 })),
+               }
+             : undefined;
+-        const res = await fetch('/api/generate/tts', {
++        const res = await fetch('/openmaic/api/generate/tts', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+@@ -434,7 +434,7 @@ function TeacherVoicePill({
+                 })),
+               }
+             : undefined;
+-        const res = await fetch('/api/generate/tts', {
++        const res = await fetch('/openmaic/api/generate/tts', {
+           method: 'POST',
+           headers: { 'Content-Type': 'application/json' },
+           body: JSON.stringify({
+diff --git a/components/chat/use-chat-sessions.ts b/components/chat/use-chat-sessions.ts
+index 917ba66..6e9c5b6 100644
+--- a/components/chat/use-chat-sessions.ts
++++ b/components/chat/use-chat-sessions.ts
+@@ -508,7 +508,7 @@ export function useChatSessions(options: UseChatSessionsOptions = {}) {
+           },
+ 
+           fetchChat: (body, signal) =>
+-            fetch('/api/chat', {
++            fetch('/openmaic/api/chat', {
+               method: 'POST',
+               headers: { 'Content-Type': 'application/json' },
+               body: JSON.stringify(body),
+diff --git a/components/scene-renderers/pbl/use-pbl-chat.ts b/components/scene-renderers/pbl/use-pbl-chat.ts
+index cfeb02f..638f192 100644
+--- a/components/scene-renderers/pbl/use-pbl-chat.ts
++++ b/components/scene-renderers/pbl/use-pbl-chat.ts
+@@ -70,7 +70,7 @@ export function usePBLChat({ projectConfig, userRole, onConfigUpdate }: UsePBLCh
+ 
+         const isJudgeAgent = currentIssue && targetAgent.name === currentIssue.judge_agent_name;
+ 
+-        const response = await fetch('/api/pbl/chat', {
++        const response = await fetch('/openmaic/api/pbl/chat', {
+           method: 'POST',
+           headers,
+           body: JSON.stringify({
+@@ -205,7 +205,7 @@ async function handleIssueComplete(
+           .filter(Boolean)
+           .join('\n');
+ 
+-        const resp = await fetch('/api/pbl/chat', {
++        const resp = await fetch('/openmaic/api/pbl/chat', {
+           method: 'POST',
+           headers,
+           body: JSON.stringify({
+diff --git a/components/scene-renderers/quiz-view.tsx b/components/scene-renderers/quiz-view.tsx
+index 3725af8..98243d3 100644
+--- a/components/scene-renderers/quiz-view.tsx
++++ b/components/scene-renderers/quiz-view.tsx
+@@ -58,7 +58,7 @@ async function gradeShortAnswerQuestion(
+     if (modelConfig.baseUrl) headers['x-base-url'] = modelConfig.baseUrl;
+     if (modelConfig.providerType) headers['x-provider-type'] = modelConfig.providerType;
+ 
+-    const res = await fetch('/api/quiz-grade', {
++    const res = await fetch('/openmaic/api/quiz-grade', {
+       method: 'POST',
+       headers,
+       body: JSON.stringify({
+diff --git a/docker-compose.yml b/docker-compose.yml
+index 1540ffa..facec6a 100644
+--- a/docker-compose.yml
++++ b/docker-compose.yml
+@@ -2,7 +2,7 @@ services:
+   openmaic:
+     build: .
+     ports:
+-      - "3000:3000"
++      - "3001:3000"
+     env_file:
+       - .env.local
+     volumes:
+diff --git a/lib/constants/base-path.ts b/lib/constants/base-path.ts
+new file mode 100644
+index 0000000..b35deee
+--- /dev/null
++++ b/lib/constants/base-path.ts
+@@ -0,0 +1 @@
++export const OPENMAIC_BASE_PATH = '/openmaic';
+diff --git a/lib/server/classroom-media-generation.ts b/lib/server/classroom-media-generation.ts
+index b0b8cea..7b26c19 100644
+--- a/lib/server/classroom-media-generation.ts
++++ b/lib/server/classroom-media-generation.ts
+@@ -59,8 +59,8 @@ async function downloadToBuffer(url: string): Promise<Buffer> {
+   return Buffer.from(await resp.arrayBuffer());
+ }
+ 
+-function mediaServingUrl(baseUrl: string, classroomId: string, subPath: string): string {
+-  return `${baseUrl}/api/classroom-media/${classroomId}/${subPath}`;
++function mediaServingUrl(_baseUrl: string, classroomId: string, subPath: string): string {
++  return `/openmaic/api/classroom-media/${classroomId}/${subPath}`;
+ }
+ 
+ // ---------------------------------------------------------------------------
+diff --git a/lib/server/classroom-storage.ts b/lib/server/classroom-storage.ts
+index 41e3e8c..21935f0 100644
+--- a/lib/server/classroom-storage.ts
++++ b/lib/server/classroom-storage.ts
+@@ -79,6 +79,6 @@ export async function persistClassroom(
+ 
+   return {
+     ...classroomData,
+-    url: `${baseUrl}/classroom/${data.id}`,
++    url: `/openmaic/classroom/${data.id}`,
+   };
+ }
+diff --git a/next.config.ts b/next.config.ts
+index f3ba6aa..39e2a00 100644
+--- a/next.config.ts
++++ b/next.config.ts
+@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
+   output: process.env.VERCEL ? undefined : 'standalone',
+   transpilePackages: ['mathml2omml', 'pptxgenjs'],
+   serverExternalPackages: [],
++  basePath: '/openmaic',
+   experimental: {
+     proxyClientMaxBodySize: '200mb',
+   },
